@@ -1,10 +1,11 @@
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.title("📥 CMMS Data Migration Tool (Excel-based Field Mapper, Can be replaced by GPT later)")
+st.title("📥 CMMS Data Migration Tool (Excel-based Rules + Type Validation)")
 
-st.write("Upload your CMMS field rules Excel file and a data file to auto-map fields, validate required values, and clean data.")
+st.write("Upload your CMMS field rules Excel file and a data file to auto-map fields, validate types and required values, and clean data.")
 
 # Step 1: Load rules from Excel
 def load_field_rules_from_excel(file):
@@ -55,12 +56,20 @@ def validate_and_clean(df, field_map, field_rules):
         series = df[source_col].copy()
 
         if field_type == "Date":
-            try:
-                series = pd.to_datetime(series, errors='coerce')
-            except Exception:
-                pass
+            series = pd.to_datetime(series, errors='coerce')
             invalid_dates = series.isna().sum()
             validation_report.append(f"{target_col}: {invalid_dates} invalid dates corrected.")
+
+        elif field_type == "Number":
+            series = pd.to_numeric(series, errors='coerce')
+            invalid_numbers = series.isna().sum()
+            validation_report.append(f"{target_col}: {invalid_numbers} invalid numbers corrected.")
+
+        elif field_type == "Text":
+            # Convert all to string (if not missing)
+            series = series.astype(str).where(~series.isna(), None)
+            non_string_count = sum([not isinstance(val, str) for val in series.dropna()])
+            validation_report.append(f"{target_col}: {non_string_count} values coerced to text.")
 
         if required:
             missing_count = series.isna().sum()
