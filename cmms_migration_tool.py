@@ -1,53 +1,62 @@
 import streamlit as st
 import pandas as pd
-import difflib
+import openai
 from datetime import datetime
 
-st.title("🧠 Smart CMMS Data Migration Assistant")
+# --- Configuration ---
+# Replace with your OpenAI key or load from env/secrets
+openai.api_key = "your-openai-api-key"
 
-st.write("Upload your Excel or CSV file to auto-map fields, validate data, and clean common issues.")
+st.title("🧠 Smart CMMS Data Migration Assistant (GPT-3.5 powered)")
 
-# Step 1: Upload file
-uploaded_file = st.file_uploader("Upload your data file (Excel or CSV)", type=["csv", "xlsx"])
+st.write("Upload your Excel or CSV file to auto-map fields, validate data, and clean common issues using GPT.")
 
 # CMMS internal field definitions
-cmms_fields = {
+cmms_fields = [
+    "Work Order Number",
+    "Work Order Date",
+    "Asset",
+    "Technician"
+]
+
+# Validation rules
+cmms_field_rules = {
     "Work Order Number": {"type": "Text", "required": True},
     "Work Order Date": {"type": "Date", "required": True},
     "Asset": {"type": "Text", "required": True},
     "Technician": {"type": "Text", "required": False}
 }
 
-# Define synonyms for better matching
-field_synonyms = {
-    "WO_ID": "Work Order Number",
-    "WO_Date": "Work Order Date",
-    "Asset_Name": "Asset",
-    "Assigned_Tech": "Technician"
-}
+# GPT-based column mapper
+def gpt_field_mapper(column_name, cmms_fields):
+    prompt = (
+        "You are a smart CMMS data assistant.\n\n"
+        "Your job is to match the following column to the most appropriate internal CMMS field.\n\n"
+        f"User column: \"{column_name}\"\n"
+        f"Available CMMS fields: {cmms_fields}\n\n"
+        "Only return one of the CMMS fields exactly as listed. If no good match exists, return \"Unmapped\"."
+    )
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        return response.choices[0].message["content"].strip()
+    except Exception as e:
+        return "Unmapped"
 
-def map_fields(customer_columns, cmms_keys):
-    mappings = {}
-    for col in customer_columns:
-        if col in field_synonyms:
-            mappings[col] = field_synonyms[col]
-            continue
-        match = difflib.get_close_matches(col, cmms_keys, n=1, cutoff=0.4)
-        mappings[col] = match[0] if match else "Unmapped"
-    return mappings
-
+# Data validation and cleaning
 def validate_and_clean(df, field_map):
     validation_report = []
     cleaned_df = pd.DataFrame()
 
     for source_col, target_col in field_map.items():
-        if target_col == "Unmapped":
-            continue
-        if target_col not in cmms_fields:
+        if target_col == "Unmapped" or target_col not in cmms_field_rules:
             continue
 
-        field_type = cmms_fields[target_col]["type"]
-        required = cmms_fields[target_col]["required"]
+        field_type = cmms_field_rules[target_col]["type"]
+        required = cmms_field_rules[target_col]["required"]
         series = df[source_col].copy()
 
         if field_type == "Date":
@@ -66,6 +75,9 @@ def validate_and_clean(df, field_map):
 
     return cleaned_df, validation_report
 
+# File upload
+uploaded_file = st.file_uploader("Upload your data file (Excel or CSV)", type=["csv", "xlsx"])
+
 if uploaded_file:
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
@@ -75,20 +87,30 @@ if uploaded_file:
     st.subheader("📄 Uploaded Data Preview")
     st.dataframe(df.head())
 
+    # GPT Mapping
+    st.subheader("🔄 GPT Field Mapping Suggestions")
     customer_columns = df.columns.tolist()
-    cmms_keys = list(cmms_fields.keys())
-    mapped_fields = map_fields(customer_columns, cmms_keys)
-
-    st.subheader("🔄 Field Mapping Suggestions")
+    mapped_fields = {col: gpt_field_mapper(col, cmms_fields) for col in customer_columns}
     mapping_df = pd.DataFrame({
         "Your Column": list(mapped_fields.keys()),
         "Mapped To": list(mapped_fields.values())
     })
     st.dataframe(mapping_df)
 
+    # ✅ Check for missing required fields
+    missing_required_fields = [
+        field for field, rules in cmms_field_rules.items()
+        if rules["required"] and field not in mapped_fields.values()
+    ]
+    if missing_required_fields:
+        st.subheader("⚠️ Missing Required Fields in Uploaded Sheet")
+        for field in missing_required_fields:
+            st.error(f"Required field not found in upload: **{field}**")
+
+    # Validation + cleaning
+    st.subheader("✅ Validation & Cleaning")
     cleaned_data, report = validate_and_clean(df, mapped_fields)
 
-    st.subheader("✅ Validation Report")
     for line in report:
         st.write("• " + line)
 
