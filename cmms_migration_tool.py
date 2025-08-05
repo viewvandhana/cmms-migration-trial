@@ -16,9 +16,9 @@ cmms_fields = [
 
 # Synonym map (case-insensitive matching)
 synonym_map = {
-    "Work Order Number": ["wo number", "work order no", "wo no", "order id"],
+    "Work Order Number": ["wo_id", "work order no", "wo no", "order id"],
     "Work Order Date": ["wo date", "work order date", "order date"],
-    "Asset": ["equipment", "machine", "asset name"],
+    "Asset": ["equipment", "machine", "asset_name"],
     "Technician": ["tech", "technician name", "assigned to"]
 }
 
