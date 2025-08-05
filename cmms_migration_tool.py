@@ -98,7 +98,7 @@ def validate_and_clean(df, field_map, field_rules):
                     error_log.append({
                         "Row": row_num,
                         "Column": source_col,
-                        "Issue": f"Value '{val}' not in reference list for '{target_col}'"
+                        "Issue": f"Value '{val}' not in reference list '{ref_values}' for '{target_col}'"
                     })
 
         cleaned_df[target_col] = cleaned_series
