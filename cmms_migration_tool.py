@@ -194,7 +194,7 @@ if rules_file:
             st.dataframe(cleaned_data.head())
             st.download_button("📥 Download Cleaned Data", cleaned_data.to_csv(index=False), "cleaned_cmms_data.csv")
 
-        if not error_df.empty:
+        if error_df.empty:
             st.subheader("❌ Cell-level Error Log")
             st.dataframe(pd.DataFrame(error_df))
             st.download_button("📥 Download Error Log", pd.DataFrame(error_df).to_csv(index=False), "cmms_error_log.csv")
