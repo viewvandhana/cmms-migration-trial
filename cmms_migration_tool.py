@@ -15,22 +15,23 @@ def load_field_rules_from_excel(file):
     df = pd.read_excel(file)
 
     cmms_fields = df["Field Name"].tolist()
-
-    # Build rules
     field_rules = {}
+
     for _, row in df.iterrows():
+        ref_values = [val.strip() for val in str(row.get("Reference Values", "")).split(";") if val.strip()]
         field_rules[row["Field Name"]] = {
             "type": row["Type"],
-            "required": bool(row["Required"])
+            "required": bool(row["Required"]),
+            "ref_values": ref_values
         }
 
-    # Build synonym map
     synonym_map = {}
     for _, row in df.iterrows():
         synonyms = [s.strip().lower() for s in str(row["Synonyms"]).split(";") if s.strip()]
         synonym_map[row["Field Name"]] = synonyms
 
     return cmms_fields, field_rules, synonym_map
+
 
 # Step 2: Synonym-based mapper
 def map_using_synonyms(user_columns, synonym_map):
@@ -87,22 +88,44 @@ def generate_excel_template(cmms_fields, cmms_field_rules):
     ws = wb.active
     ws.title = "CMMS Template"
 
-    # Write headers
+    # Add headers + type hints
     for col_index, field in enumerate(cmms_fields, start=1):
         ws.cell(row=1, column=col_index, value=field)
-        # Hint row
         hint = f"({cmms_field_rules[field]['type']}){'*' if cmms_field_rules[field]['required'] else ''}"
         ws.cell(row=2, column=col_index, value=hint)
-        # Adjust column width
         ws.column_dimensions[openpyxl.utils.get_column_letter(col_index)].width = max(15, len(field) + 5)
 
-    # Add data validation starting from row 3 to row 10
+    # Create hidden reference sheet
+    ref_ws = wb.create_sheet("ReferenceData")
+    ref_ws.sheet_state = 'hidden'
+    ref_field_map = {}
+    ref_col_index = 1
+
+    for field, rule in cmms_field_rules.items():
+        ref_values = rule.get("ref_values", [])
+        if ref_values:
+            for i, val in enumerate(ref_values):
+                ref_ws.cell(row=i+1, column=ref_col_index, value=val)
+            col_letter = openpyxl.utils.get_column_letter(ref_col_index)
+            ref_range = f"ReferenceData!${col_letter}$1:${col_letter}${len(ref_values)}"
+            ref_field_map[field] = ref_range
+            ref_col_index += 1
+
+    # Apply validations
     for col_index, field in enumerate(cmms_fields, start=1):
         rule = cmms_field_rules.get(field, {})
         col_letter = openpyxl.utils.get_column_letter(col_index)
         target_range = f"{col_letter}3:{col_letter}10"
 
-        if rule.get("type") == "Number":
+        if field in ref_field_map:
+            dv = DataValidation(type="list", formula1=f"={ref_field_map[field]}", showDropDown=True)
+            dv.error = "Invalid selection"
+            dv.prompt = "Choose from list"
+            dv.promptTitle = f"{field}"
+            dv.add(target_range)
+            ws.add_data_validation(dv)
+
+        elif rule.get("type") == "Number":
             dv = DataValidation(type="decimal", allow_blank=not rule["required"])
             dv.error = "Please enter a valid number"
             dv.prompt = "Enter a number"
