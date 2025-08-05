@@ -18,10 +18,11 @@ def load_field_rules_from_excel(file):
     field_rules = {}
 
     for _, row in df.iterrows():
-        raw_ref = str(row.get("Reference Values", "")).strip()
+       raw_ref = str(row.get("Reference Values", "")).strip()
         ref_values = []
-        if raw_ref and any(c.isalnum() for c in raw_ref):  # only consider if there's meaningful content
-         ref_values = [val.strip() for val in raw_ref.split(";") if val.strip()]
+        # Only process if there's actual alphanumeric content
+        if raw_ref and any(c.isalnum() for c in raw_ref):
+            ref_values = [val.strip() for val in raw_ref.split(";") if val.strip()]
         field_rules[row["Field Name"]] = {
             "type": row["Type"],
             "required": bool(row["Required"]),
