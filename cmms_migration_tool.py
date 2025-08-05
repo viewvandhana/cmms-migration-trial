@@ -18,11 +18,13 @@ def load_field_rules_from_excel(file):
 
     for _, row in df.iterrows():
         field_name = str(row["Field Name"]).strip()
-        raw_ref = str(row.get("Reference Values", "")).strip().lower()
-        ref_values = []
-        if raw_ref and raw_ref not in ["", "None", "n/a", "na"]:
-            ref_values = [val.strip() for val in raw_ref.split(";") if val.strip()]
-            field_rules[field_name] = {
+        raw_ref_cell = row.get("Reference Values", "")
+        # Only proceed if it's a string and not null/NaN
+        if pd.notna(raw_ref_cell) and isinstance(raw_ref_cell, str) and raw_ref_cell.strip().lower() not in ["none", "n/a", "na", ""]:
+            ref_values = [val.strip() for val in raw_ref_cell.split(";") if val.strip()]
+        else:
+            ref_values = []
+        field_rules[field_name] = {
             "type": str(row["Type"]).strip(),
             "required": bool(row["Required"]),
             "ref_values": ref_values
