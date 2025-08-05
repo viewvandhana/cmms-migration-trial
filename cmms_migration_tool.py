@@ -19,7 +19,7 @@ def load_field_rules_from_excel(file):
 
     for _, row in df.iterrows():
        raw_ref = str(row.get("Reference Values", "")).strip()
-        ref_values = []
+       ref_values = []
         # Only process if there's actual alphanumeric content
         if raw_ref and any(c.isalnum() for c in raw_ref):
             ref_values = [val.strip() for val in raw_ref.split(";") if val.strip()]
