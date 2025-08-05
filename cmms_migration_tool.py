@@ -251,11 +251,11 @@ else:
     st.success("🎉 No cell-level validation errors!")
 
 
-        for line in report:
-            st.write("• " + line)
+for line in report:
+    st.write("• " + line)
 
-        st.subheader("🧹 Cleaned Data Preview")
-        st.dataframe(cleaned_data.head())
+    st.subheader("🧹 Cleaned Data Preview")
+    st.dataframe(cleaned_data.head())
 
-        csv = cleaned_data.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Cleaned Data", csv, "cleaned_cmms_data.csv", "text/csv")
+    csv = cleaned_data.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Cleaned Data", csv, "cleaned_cmms_data.csv", "text/csv")
