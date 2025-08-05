@@ -2,10 +2,13 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from io import BytesIO
+import openpyxl
+from openpyxl.worksheet.datavalidation import DataValidation
 
-st.title("📥 CMMS Data Migration Tool (Excel-based Rules + Type Validation)")
+st.title("📥 CMMS Data Migration Tool (with Template Download)")
 
-st.write("Upload your CMMS field rules Excel file and a data file to auto-map fields, validate types and required values, and clean data.")
+st.write("Upload your CMMS field rules Excel file and a data file to auto-map fields, validate types, clean data, and download templates.")
 
 # Step 1: Load rules from Excel
 def load_field_rules_from_excel(file):
@@ -66,7 +69,6 @@ def validate_and_clean(df, field_map, field_rules):
             validation_report.append(f"{target_col}: {invalid_numbers} invalid numbers corrected.")
 
         elif field_type == "Text":
-            # Convert all to string (if not missing)
             series = series.astype(str).where(~series.isna(), None)
             non_string_count = sum([not isinstance(val, str) for val in series.dropna()])
             validation_report.append(f"{target_col}: {non_string_count} values coerced to text.")
@@ -79,12 +81,55 @@ def validate_and_clean(df, field_map, field_rules):
 
     return cleaned_df, validation_report
 
+# Step 4: Generate Excel template from field rules
+def generate_excel_template(cmms_fields, cmms_field_rules):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "CMMS Template"
+
+    for col_index, field in enumerate(cmms_fields, start=1):
+        ws.cell(row=1, column=col_index, value=field)
+
+    for col_index, field in enumerate(cmms_fields, start=1):
+        rule = cmms_field_rules.get(field, {})
+        col_letter = openpyxl.utils.get_column_letter(col_index)
+
+        if rule.get("type") == "Number":
+            dv = DataValidation(type="decimal", operator="greaterThan", formula1="0", allow_blank=not rule.get("required", False))
+            dv.error = "Please enter a valid number"
+            dv.prompt = "Enter a number"
+            dv.promptTitle = f"{field} (Number)"
+            ws.add_data_validation(dv)
+            dv.add(f"{col_letter}2:{col_letter}1000")
+
+        elif rule.get("type") == "Date":
+            dv = DataValidation(type="date", allow_blank=not rule.get("required", False))
+            dv.error = "Please enter a valid date"
+            dv.prompt = "Enter a date (e.g., YYYY-MM-DD)"
+            dv.promptTitle = f"{field} (Date)"
+            ws.add_data_validation(dv)
+            dv.add(f"{col_letter}2:{col_letter}1000")
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
 # Upload rules file
 rules_file = st.file_uploader("Upload CMMS Field Rules Excel File", type=["xlsx"])
 
 if rules_file:
     cmms_fields, cmms_field_rules, synonym_map = load_field_rules_from_excel(rules_file)
     st.success("✅ Field rules loaded successfully!")
+
+    # 📥 Download Excel template button
+    excel_bytes = generate_excel_template(cmms_fields, cmms_field_rules)
+    st.download_button(
+        label="📄 Download Excel Template",
+        data=excel_bytes,
+        file_name="cmms_data_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
     # Upload data file
     uploaded_file = st.file_uploader("Upload your data file (Excel or CSV)", type=["csv", "xlsx"])
@@ -98,7 +143,6 @@ if rules_file:
         st.subheader("📄 Uploaded Data Preview")
         st.dataframe(df.head())
 
-        # Field mapping
         st.subheader("🔄 Field Mapping Using Synonyms")
         user_columns = df.columns.tolist()
         mapped_fields = map_using_synonyms(user_columns, synonym_map)
@@ -109,7 +153,6 @@ if rules_file:
         })
         st.dataframe(mapping_df)
 
-        # Check for missing required fields
         missing_required_fields = [
             field for field, rules in cmms_field_rules.items()
             if rules["required"] and field not in mapped_fields.values()
@@ -119,7 +162,6 @@ if rules_file:
             for field in missing_required_fields:
                 st.error(f"Required field not found in upload: **{field}**")
 
-        # Validation & Cleaning
         st.subheader("✅ Validation & Cleaning")
         cleaned_data, report = validate_and_clean(df, mapped_fields, cmms_field_rules)
 
