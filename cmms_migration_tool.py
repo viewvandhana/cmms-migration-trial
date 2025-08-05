@@ -66,39 +66,59 @@ def validate_and_clean(df, field_map, field_rules):
         cleaned_series = original_series.copy()
 
         for idx, val in original_series.items():
-            row_num = idx + 2
+            row_num = idx + 2  # Adjust for Excel row numbering
 
-            if required and (pd.isna(val) or val == ""):
-                error_log.append({"Row": row_num, "Column": source_col, "Issue": "Missing required value"})
-                continue
+            # ✅ 1. Handle empty or missing values
+            if pd.isna(val) or str(val).strip() == "":
+                if required:
+                    error_log.append({
+                        "Row": row_num,
+                        "Column": source_col,
+                        "Issue": "Missing required value"
+                    })
+                continue  # Skip further checks for empty cells
 
+            # ✅ 2. Type validation
             if field_type == "Date":
                 try:
                     cleaned_series[idx] = pd.to_datetime(val)
                 except:
-                    error_log.append({"Row": row_num, "Column": source_col, "Issue": "Invalid date format"})
+                    error_log.append({
+                        "Row": row_num,
+                        "Column": source_col,
+                        "Issue": "Invalid date format"
+                    })
                     cleaned_series[idx] = pd.NaT
 
             elif field_type == "Number":
                 try:
                     cleaned_series[idx] = pd.to_numeric(val)
                 except:
-                    error_log.append({"Row": row_num, "Column": source_col, "Issue": "Invalid number"})
+                    error_log.append({
+                        "Row": row_num,
+                        "Column": source_col,
+                        "Issue": "Invalid number"
+                    })
                     cleaned_series[idx] = pd.NA
 
             elif field_type == "Text":
                 try:
                     cleaned_series[idx] = str(val)
                 except:
-                    error_log.append({"Row": row_num, "Column": source_col, "Issue": "Invalid text"})
+                    error_log.append({
+                        "Row": row_num,
+                        "Column": source_col,
+                        "Issue": "Invalid text"
+                    })
 
-            if ref_values and not pd.isna(val) and str(val).strip() != "":
+            # ✅ 3. Reference value validation (only for non-empty cells)
+            if ref_values:
                 val_str = str(val).strip()
                 if val_str not in ref_values:
                     error_log.append({
                         "Row": row_num,
                         "Column": source_col,
-                        "Issue": f"Value '{val}' not in reference list '{ref_values}' for '{target_col}'"
+                        "Issue": f"Value '{val}' not in reference list for '{target_col}'"
                     })
 
         cleaned_df[target_col] = cleaned_series
