@@ -20,7 +20,7 @@ def load_field_rules_from_excel(file):
         field_name = str(row["Field Name"]).strip()
         raw_ref = str(row.get("Reference Values", "")).strip()
         ref_values = []
-        if raw_ref and any(c.isalnum() for c in raw_ref):
+        if raw_ref.strip() != "":
             ref_values = [val.strip() for val in raw_ref.split(";") if val.strip()]
         field_rules[field_name] = {
             "type": str(row["Type"]).strip(),
