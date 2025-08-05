@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.title("📥 CMMS Data Migration Tool (Excel-based Rules, No GPT)")
+st.title("📥 CMMS Data Migration Tool (Excel-based Field Mapper, Can be replaced by GPT later)")
 
 st.write("Upload your CMMS field rules Excel file and a data file to auto-map fields, validate required values, and clean data.")
 
