@@ -120,6 +120,7 @@ def validate_and_clean(df, field_map, field_rules):
                     "Issue": f"Value '{val}' not in reference list"
                 })
 
+
         cleaned_df[target_col] = cleaned_series
 
     return cleaned_df, validation_report, pd.DataFrame(error_log)
