@@ -87,33 +87,42 @@ def generate_excel_template(cmms_fields, cmms_field_rules):
     ws = wb.active
     ws.title = "CMMS Template"
 
+    # Write headers
     for col_index, field in enumerate(cmms_fields, start=1):
         ws.cell(row=1, column=col_index, value=field)
+        # Hint row
+        hint = f"({cmms_field_rules[field]['type']}){'*' if cmms_field_rules[field]['required'] else ''}"
+        ws.cell(row=2, column=col_index, value=hint)
+        # Adjust column width
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col_index)].width = max(15, len(field) + 5)
 
+    # Add data validation starting from row 3 to row 10
     for col_index, field in enumerate(cmms_fields, start=1):
         rule = cmms_field_rules.get(field, {})
         col_letter = openpyxl.utils.get_column_letter(col_index)
+        target_range = f"{col_letter}3:{col_letter}10"
 
         if rule.get("type") == "Number":
-            dv = DataValidation(type="decimal", operator="greaterThan", formula1="0", allow_blank=not rule.get("required", False))
+            dv = DataValidation(type="decimal", allow_blank=not rule["required"])
             dv.error = "Please enter a valid number"
             dv.prompt = "Enter a number"
             dv.promptTitle = f"{field} (Number)"
+            dv.add(target_range)
             ws.add_data_validation(dv)
-            dv.add(f"{col_letter}2:{col_letter}1000")
 
         elif rule.get("type") == "Date":
-            dv = DataValidation(type="date", allow_blank=not rule.get("required", False))
+            dv = DataValidation(type="date", allow_blank=not rule["required"])
             dv.error = "Please enter a valid date"
-            dv.prompt = "Enter a date (e.g., YYYY-MM-DD)"
+            dv.prompt = "Enter a date (YYYY-MM-DD)"
             dv.promptTitle = f"{field} (Date)"
+            dv.add(target_range)
             ws.add_data_validation(dv)
-            dv.add(f"{col_letter}2:{col_letter}1000")
 
     output = BytesIO()
     wb.save(output)
     output.seek(0)
     return output
+
 
 # Upload rules file
 rules_file = st.file_uploader("Upload CMMS Field Rules Excel File", type=["xlsx"])
