@@ -92,7 +92,7 @@ def validate_and_clean(df, field_map, field_rules):
                 except:
                     error_log.append({"Row": row_num, "Column": source_col, "Issue": "Invalid text"})
 
-            if ref_values:
+            if ref_values and not pd.isna(val) and str(val).strip() != "":
                 val_str = str(val).strip()
                 if val_str not in ref_values:
                     error_log.append({
