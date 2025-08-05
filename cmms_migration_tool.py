@@ -50,6 +50,7 @@ def map_using_synonyms(user_columns, synonym_map):
 def validate_and_clean(df, field_map, field_rules):
     validation_report = []
     cleaned_df = pd.DataFrame()
+    error_log = []
 
     for source_col, target_col in field_map.items():
         if target_col == "Unmapped" or target_col not in field_rules:
@@ -59,38 +60,82 @@ def validate_and_clean(df, field_map, field_rules):
         field_type = rule["type"]
         required = rule["required"]
         ref_values = rule.get("ref_values", [])
-        series = df[source_col].copy()
+        original_series = df[source_col]
+        cleaned_series = original_series.copy()
 
-        # TYPE VALIDATION
-        if field_type == "Date":
-            series = pd.to_datetime(series, errors='coerce')
-            invalid_dates = series.isna().sum()
-            validation_report.append(f"{target_col}: {invalid_dates} invalid dates corrected.")
+        for idx, val in original_series.items():
+            row_num = idx + 2  # Excel-style (assuming headers in row 1)
 
-        elif field_type == "Number":
-            series = pd.to_numeric(series, errors='coerce')
-            invalid_numbers = series.isna().sum()
-            validation_report.append(f"{target_col}: {invalid_numbers} invalid numbers corrected.")
+            # Required field check
+            if required and (pd.isna(val) or val == ""):
+                error_log.append({
+                    "Row": row_num,
+                    "Column": source_col,
+                    "Issue": "Missing required value"
+                })
+                continue
 
-        elif field_type == "Text":
-            series = series.astype(str).where(~series.isna(), None)
-            non_string_count = sum([not isinstance(val, str) for val in series.dropna()])
-            validation_report.append(f"{target_col}: {non_string_count} values coerced to text.")
+            # Type validation
+            if field_type == "Date":
+                try:
+                    cleaned_series[idx] = pd.to_datetime(val)
+                except:
+                    error_log.append({
+                        "Row": row_num,
+                        "Column": source_col,
+                        "Issue": "Invalid date format"
+                    })
+                    cleaned_series[idx] = pd.NaT
 
-        # REQUIRED VALIDATION
-        if required:
-            missing_count = series.isna().sum()
-            validation_report.append(f"{target_col}: {missing_count} missing required values.")
+            elif field_type == "Number":
+                try:
+                    cleaned_series[idx] = pd.to_numeric(val)
+                except:
+                    error_log.append({
+                        "Row": row_num,
+                        "Column": source_col,
+                        "Issue": "Invalid number"
+                    })
+                    cleaned_series[idx] = pd.NA
 
-        # REFERENCE VALIDATION
-        if ref_values:
-            invalid_refs = (~series.isin(ref_values)).sum()
-            validation_report.append(f"{target_col}: {invalid_refs} values not in reference list: {ref_values}")
+            elif field_type == "Text":
+                try:
+                    cleaned_series[idx] = str(val)
+                except:
+                    error_log.append({
+                        "Row": row_num,
+                        "Column": source_col,
+                        "Issue": "Invalid text"
+                    })
 
-        # Save cleaned
-        cleaned_df[target_col] = series
+            # Reference validation
+            if ref_values and str(val).strip() not in ref_values:
+                error_log.append({
+                    "Row": row_num,
+                    "Column": source_col,
+                    "Issue": f"Value '{val}' not in reference list"
+                })
 
-    return cleaned_df, validation_report
+        cleaned_df[target_col] = cleaned_series
+
+    return cleaned_df, validation_report, pd.DataFrame(error_log)
+
+cleaned_data, report, error_df = validate_and_clean(df, mapped_fields, cmms_field_rules)
+
+st.subheader("🧹 Cleaned Data Preview")
+st.dataframe(cleaned_data.head())
+
+csv = cleaned_data.to_csv(index=False).encode('utf-8')
+st.download_button("📥 Download Cleaned Data", csv, "cleaned_cmms_data.csv", "text/csv")
+
+if not error_df.empty:
+    st.subheader("❌ Cell-level Error Log")
+    st.dataframe(error_df)
+
+    error_csv = error_df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Error Log", error_csv, "cmms_error_log.csv", "text/csv")
+else:
+    st.success("🎉 No cell-level validation errors!")
 
 
 # Step 4: Generate Excel template from field rules
