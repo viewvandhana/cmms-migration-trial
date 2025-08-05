@@ -120,24 +120,6 @@ def validate_and_clean(df, field_map, field_rules):
 
     return cleaned_df, validation_report, pd.DataFrame(error_log)
 
-cleaned_data, report, error_df = validate_and_clean(df, mapped_fields, cmms_field_rules)
-
-st.subheader("🧹 Cleaned Data Preview")
-st.dataframe(cleaned_data.head())
-
-csv = cleaned_data.to_csv(index=False).encode('utf-8')
-st.download_button("📥 Download Cleaned Data", csv, "cleaned_cmms_data.csv", "text/csv")
-
-if not error_df.empty:
-    st.subheader("❌ Cell-level Error Log")
-    st.dataframe(error_df)
-
-    error_csv = error_df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Error Log", error_csv, "cmms_error_log.csv", "text/csv")
-else:
-    st.success("🎉 No cell-level validation errors!")
-
-
 # Step 4: Generate Excel template from field rules
 def generate_excel_template(cmms_fields, cmms_field_rules):
     wb = openpyxl.Workbook()
@@ -251,7 +233,23 @@ if rules_file:
                 st.error(f"Required field not found in upload: **{field}**")
 
         st.subheader("✅ Validation & Cleaning")
-        cleaned_data, report = validate_and_clean(df, mapped_fields, cmms_field_rules)
+        cleaned_data, report, error_df = validate_and_clean(df, mapped_fields, cmms_field_rules)
+
+st.subheader("🧹 Cleaned Data Preview")
+st.dataframe(cleaned_data.head())
+
+csv = cleaned_data.to_csv(index=False).encode('utf-8')
+st.download_button("📥 Download Cleaned Data", csv, "cleaned_cmms_data.csv", "text/csv")
+
+if not error_df.empty:
+    st.subheader("❌ Cell-level Error Log")
+    st.dataframe(error_df)
+
+    error_csv = error_df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Error Log", error_csv, "cmms_error_log.csv", "text/csv")
+else:
+    st.success("🎉 No cell-level validation errors!")
+
 
         for line in report:
             st.write("• " + line)
