@@ -1,23 +1,26 @@
 import streamlit as st
 import pandas as pd
-import openai
 from datetime import datetime
 
-# --- Configuration ---
-# Replace with your OpenAI key or load from env/secrets
-openai.api_key = "your-openai-api-key"
+st.title("🔁 CMMS Data Migration Tool (Synonym Mapping, No GPT)")
 
-st.title("🧠 Smart CMMS Data Migration Assistant (GPT-3.5 powered)")
+st.write("Upload your Excel or CSV file to auto-map fields using synonyms, validate data, and clean common issues.")
 
-st.write("Upload your Excel or CSV file to auto-map fields, validate data, and clean common issues using GPT.")
-
-# CMMS internal field definitions
+# CMMS field definitions
 cmms_fields = [
     "Work Order Number",
     "Work Order Date",
     "Asset",
     "Technician"
 ]
+
+# Synonym map (case-insensitive matching)
+synonym_map = {
+    "Work Order Number": ["wo number", "work order no", "wo no", "order id"],
+    "Work Order Date": ["wo date", "work order date", "order date"],
+    "Asset": ["equipment", "machine", "asset name"],
+    "Technician": ["tech", "technician name", "assigned to"]
+}
 
 # Validation rules
 cmms_field_rules = {
@@ -27,26 +30,20 @@ cmms_field_rules = {
     "Technician": {"type": "Text", "required": False}
 }
 
-# GPT-based column mapper
-def gpt_field_mapper(column_name, cmms_fields):
-    prompt = (
-        "You are a smart CMMS data assistant.\n\n"
-        "Your job is to match the following column to the most appropriate internal CMMS field.\n\n"
-        f"User column: \"{column_name}\"\n"
-        f"Available CMMS fields: {cmms_fields}\n\n"
-        "Only return one of the CMMS fields exactly as listed. If no good match exists, return \"Unmapped\"."
-    )
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
-        return response.choices[0].message["content"].strip()
-    except Exception as e:
-        return "Unmapped"
+# Synonym-based mapper
+def map_using_synonyms(user_columns):
+    field_map = {}
+    for col in user_columns:
+        mapped = "Unmapped"
+        col_lower = col.strip().lower()
+        for cmms_field, synonyms in synonym_map.items():
+            if col_lower == cmms_field.lower() or col_lower in [s.lower() for s in synonyms]:
+                mapped = cmms_field
+                break
+        field_map[col] = mapped
+    return field_map
 
-# Data validation and cleaning
+# Validation & cleaning
 def validate_and_clean(df, field_map):
     validation_report = []
     cleaned_df = pd.DataFrame()
@@ -75,7 +72,7 @@ def validate_and_clean(df, field_map):
 
     return cleaned_df, validation_report
 
-# File upload
+# Upload file
 uploaded_file = st.file_uploader("Upload your data file (Excel or CSV)", type=["csv", "xlsx"])
 
 if uploaded_file:
@@ -87,17 +84,18 @@ if uploaded_file:
     st.subheader("📄 Uploaded Data Preview")
     st.dataframe(df.head())
 
-    # GPT Mapping
-    st.subheader("🔄 GPT Field Mapping Suggestions")
-    customer_columns = df.columns.tolist()
-    mapped_fields = {col: gpt_field_mapper(col, cmms_fields) for col in customer_columns}
+    # Mapping with synonyms
+    st.subheader("🔄 Field Mapping Using Synonyms")
+    user_columns = df.columns.tolist()
+    mapped_fields = map_using_synonyms(user_columns)
+
     mapping_df = pd.DataFrame({
         "Your Column": list(mapped_fields.keys()),
         "Mapped To": list(mapped_fields.values())
     })
     st.dataframe(mapping_df)
 
-    # ✅ Check for missing required fields
+    # Check for missing required fields
     missing_required_fields = [
         field for field, rules in cmms_field_rules.items()
         if rules["required"] and field not in mapped_fields.values()
@@ -107,7 +105,7 @@ if uploaded_file:
         for field in missing_required_fields:
             st.error(f"Required field not found in upload: **{field}**")
 
-    # Validation + cleaning
+    # Validation & Cleaning
     st.subheader("✅ Validation & Cleaning")
     cleaned_data, report = validate_and_clean(df, mapped_fields)
 
