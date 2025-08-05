@@ -55,10 +55,13 @@ def validate_and_clean(df, field_map, field_rules):
         if target_col == "Unmapped" or target_col not in field_rules:
             continue
 
-        field_type = field_rules[target_col]["type"]
-        required = field_rules[target_col]["required"]
+        rule = field_rules[target_col]
+        field_type = rule["type"]
+        required = rule["required"]
+        ref_values = rule.get("ref_values", [])
         series = df[source_col].copy()
 
+        # TYPE VALIDATION
         if field_type == "Date":
             series = pd.to_datetime(series, errors='coerce')
             invalid_dates = series.isna().sum()
@@ -74,13 +77,21 @@ def validate_and_clean(df, field_map, field_rules):
             non_string_count = sum([not isinstance(val, str) for val in series.dropna()])
             validation_report.append(f"{target_col}: {non_string_count} values coerced to text.")
 
+        # REQUIRED VALIDATION
         if required:
             missing_count = series.isna().sum()
             validation_report.append(f"{target_col}: {missing_count} missing required values.")
 
+        # REFERENCE VALIDATION
+        if ref_values:
+            invalid_refs = (~series.isin(ref_values)).sum()
+            validation_report.append(f"{target_col}: {invalid_refs} values not in reference list: {ref_values}")
+
+        # Save cleaned
         cleaned_df[target_col] = series
 
     return cleaned_df, validation_report
+
 
 # Step 4: Generate Excel template from field rules
 def generate_excel_template(cmms_fields, cmms_field_rules):
