@@ -1,119 +1,99 @@
-
 import streamlit as st
-import streamlit_authenticator as stauth
 import pandas as pd
 import difflib
 from datetime import datetime
 
-st.title("🔐 Smart CMMS Data Migration Assistant (Private)")
+st.title("🧠 Smart CMMS Data Migration Assistant")
 
-# --- USER AUTH SETUP ---
-names = ['Vandhana Sridhar', 'John Doe']
-usernames = ['vandhana', 'johndoe']
-passwords = stauth.Hasher(['your_password1', 'your_password2']).generate()
+st.write("Upload your Excel or CSV file to auto-map fields, validate data, and clean common issues.")
 
-authenticator = stauth.Authenticate(names, usernames, passwords, 'cmms_migrate', 'abcdef', cookie_expiry_days=1)
+# Step 1: Upload file
+uploaded_file = st.file_uploader("Upload your data file (Excel or CSV)", type=["csv", "xlsx"])
 
-name, authentication_status, username = authenticator.login('Login', 'main')
+# CMMS internal field definitions
+cmms_fields = {
+    "Work Order Number": {"type": "Text", "required": True},
+    "Work Order Date": {"type": "Date", "required": True},
+    "Asset": {"type": "Text", "required": True},
+    "Technician": {"type": "Text", "required": False}
+}
 
-if authentication_status == False:
-    st.error('Username/password is incorrect')
-elif authentication_status == None:
-    st.warning('Please enter your username and password')
-elif authentication_status:
+# Define synonyms for better matching
+field_synonyms = {
+    "WO_ID": "Work Order Number",
+    "WO_Date": "Work Order Date",
+    "Asset_Name": "Asset",
+    "Assigned_Tech": "Technician"
+}
 
-    authenticator.logout('Logout', 'sidebar')
-    st.sidebar.success(f"Welcome {name}!")
+def map_fields(customer_columns, cmms_keys):
+    mappings = {}
+    for col in customer_columns:
+        if col in field_synonyms:
+            mappings[col] = field_synonyms[col]
+            continue
+        match = difflib.get_close_matches(col, cmms_keys, n=1, cutoff=0.4)
+        mappings[col] = match[0] if match else "Unmapped"
+    return mappings
 
-    st.write("Upload your Excel or CSV file to auto-map fields, validate data, and clean common issues.")
+def validate_and_clean(df, field_map):
+    validation_report = []
+    cleaned_df = pd.DataFrame()
 
-    # Step 1: Upload file
-    uploaded_file = st.file_uploader("Upload your data file (Excel or CSV)", type=["csv", "xlsx"])
+    for source_col, target_col in field_map.items():
+        if target_col == "Unmapped":
+            continue
+        if target_col not in cmms_fields:
+            continue
 
-    # CMMS internal field definitions
-    cmms_fields = {
-        "Work Order Number": {"type": "Text", "required": True},
-        "Work Order Date": {"type": "Date", "required": True},
-        "Asset": {"type": "Text", "required": True},
-        "Technician": {"type": "Text", "required": False}
-    }
+        field_type = cmms_fields[target_col]["type"]
+        required = cmms_fields[target_col]["required"]
+        series = df[source_col].copy()
 
-    # Define synonyms for better matching
-    field_synonyms = {
-        "WO_ID": "Work Order Number",
-        "WO_Date": "Work Order Date",
-        "Asset_Name": "Asset",
-        "Assigned_Tech": "Technician"
-    }
+        if field_type == "Date":
+            try:
+                series = pd.to_datetime(series, errors='coerce')
+            except Exception:
+                pass
+            invalid_dates = series.isna().sum()
+            validation_report.append(f"{target_col}: {invalid_dates} invalid dates corrected.")
 
-    def map_fields(customer_columns, cmms_keys):
-        mappings = {}
-        for col in customer_columns:
-            if col in field_synonyms:
-                mappings[col] = field_synonyms[col]
-                continue
-            match = difflib.get_close_matches(col, cmms_keys, n=1, cutoff=0.4)
-            mappings[col] = match[0] if match else "Unmapped"
-        return mappings
+        if required:
+            missing_count = series.isna().sum()
+            validation_report.append(f"{target_col}: {missing_count} missing required values.")
 
-    def validate_and_clean(df, field_map):
-        validation_report = []
-        cleaned_df = pd.DataFrame()
+        cleaned_df[target_col] = series
 
-        for source_col, target_col in field_map.items():
-            if target_col == "Unmapped":
-                continue
-            if target_col not in cmms_fields:
-                continue
+    return cleaned_df, validation_report
 
-            field_type = cmms_fields[target_col]["type"]
-            required = cmms_fields[target_col]["required"]
-            series = df[source_col].copy()
+if uploaded_file:
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
 
-            if field_type == "Date":
-                try:
-                    series = pd.to_datetime(series, errors='coerce')
-                except Exception:
-                    pass
-                invalid_dates = series.isna().sum()
-                validation_report.append(f"{target_col}: {invalid_dates} invalid dates corrected.")
+    st.subheader("📄 Uploaded Data Preview")
+    st.dataframe(df.head())
 
-            if required:
-                missing_count = series.isna().sum()
-                validation_report.append(f"{target_col}: {missing_count} missing required values.")
+    customer_columns = df.columns.tolist()
+    cmms_keys = list(cmms_fields.keys())
+    mapped_fields = map_fields(customer_columns, cmms_keys)
 
-            cleaned_df[target_col] = series
+    st.subheader("🔄 Field Mapping Suggestions")
+    mapping_df = pd.DataFrame({
+        "Your Column": list(mapped_fields.keys()),
+        "Mapped To": list(mapped_fields.values())
+    })
+    st.dataframe(mapping_df)
 
-        return cleaned_df, validation_report
+    cleaned_data, report = validate_and_clean(df, mapped_fields)
 
-    if uploaded_file:
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
+    st.subheader("✅ Validation Report")
+    for line in report:
+        st.write("• " + line)
 
-        st.subheader("📄 Uploaded Data Preview")
-        st.dataframe(df.head())
+    st.subheader("🧹 Cleaned Data Preview")
+    st.dataframe(cleaned_data.head())
 
-        customer_columns = df.columns.tolist()
-        cmms_keys = list(cmms_fields.keys())
-        mapped_fields = map_fields(customer_columns, cmms_keys)
-
-        st.subheader("🔄 Field Mapping Suggestions")
-        mapping_df = pd.DataFrame({
-            "Your Column": list(mapped_fields.keys()),
-            "Mapped To": list(mapped_fields.values())
-        })
-        st.dataframe(mapping_df)
-
-        cleaned_data, report = validate_and_clean(df, mapped_fields)
-
-        st.subheader("✅ Validation Report")
-        for line in report:
-            st.write("• " + line)
-
-        st.subheader("🧹 Cleaned Data Preview")
-        st.dataframe(cleaned_data.head())
-
-        csv = cleaned_data.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Cleaned Data", csv, "cleaned_cmms_data.csv", "text/csv")
+    csv = cleaned_data.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Cleaned Data", csv, "cleaned_cmms_data.csv", "text/csv")
